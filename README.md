@@ -10,3 +10,5 @@
 # Not yet
  Count down mode (set)
  Count down mode (count)	
+# Bug
+ Count up mode (begin line 178)
