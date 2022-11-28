@@ -23,7 +23,8 @@
 
 #define START_VALUE     0     
 #define CTIME_AMOUNT    345600            // 0        ->  345599
-#define MODE_AMOUNT     6                 // (mode 0) ->  (mode 5)
+#define COUNT_AMOUNT    24000             // 0        ->  23999
+#define MODE_AMOUNT     5                 // (mode 0) ->  (mode 4)
 #define SET_AMOUNT      3                 // (set 0)  ->  (set 2)
 #define ALARM_DUR       1                 // Alarm duration (minutes)
 
@@ -38,16 +39,19 @@ bool avaiTable[4][6] =  {{1, 1, 1, 1, 1, 1},
 
 // Time
 volatile long count_per_025sec = 0;       // 0 -> 345600  (00:00:00 -> 23:59:59)
-volatile long set_time = 0;               // 0 -> 345600  (00:00:00 -> 23:59:59)
 volatile long alarm_time = 0;             // 0 -> 345600  (00:00:00 -> 23:59:59)
-volatile int countUp_time = 0;            // 0 -> 23999   (00:00:00 -> 00:99:59
+volatile int countUp_time = 0;            // 0 -> 23999   (00:00:00 -> 00:99:59)
+volatile int countDown_time = 0;          // 0 -> 23999   (00:00:00 -> 00:99:59)
 // State
 volatile int mode = 0;                    // 0 -> 5
 volatile int select = 0;                  // 0 -> 2
 // Adjust flag
 volatile bool inc_enable = false;         // increase enable flag
 volatile bool dec_enable = false;         // decrease enable flag
-volatile bool countUp_enable = false;     // release flag
+volatile bool countUp_enable = false;     // 
+volatile bool countDown_enable = false;     // 
+// Trigger flag
+volatile bool trigC_enable = false;
 
 
 long overflow_sta(volatile long num, char sta_type) {
@@ -63,6 +67,9 @@ long overflow_sta(volatile long num, char sta_type) {
       break;
     case 'S':     // overflow SET (special overflow for Mode 1)
       num = (num >= SET_AMOUNT) ? num % SET_AMOUNT + 1 : (num < START_VALUE) ? num + SET_AMOUNT : num;
+      break;
+    case 'c':     // count min:sec
+      num = (num >= COUNT_AMOUNT) ? num % COUNT_AMOUNT : (num < START_VALUE) ? num + COUNT_AMOUNT : num;
       break;
   }
   return num;
@@ -86,6 +93,8 @@ void adjust_enable(bool inc_flag = false, bool dec_flag = false) {
           break;
         case 4:                           // Set countdown time mode
           // Set countdown time mode???? //////////////////////////////
+          (select == 1) ? countDown_time += (CTIME_AMOUNT / 24 / 60) : countDown_time += (CTIME_AMOUNT / 24 / 60 / 60);
+          countDown_time = overflow_sta(countDown_time, 'c');
           break;
       }
     }
@@ -105,8 +114,10 @@ void adjust_enable(bool inc_flag = false, bool dec_flag = false) {
           Serial.print("Alarm time:\t");
           Serial.println(alarm_time);
           break;
-        case 4:                         // Set countdown time mode
+        case 4:                           // Set countdown time mode
           // Set countdown time mode???? //////////////////////////////
+          (select == 1) ? countDown_time -= (CTIME_AMOUNT / 24 / 60) : countDown_time -= (CTIME_AMOUNT / 24 / 60 / 60);
+          countDown_time = overflow_sta(countDown_time, 'c');
           break;
       }
     }
@@ -230,16 +241,16 @@ void setup() {
 //  External Interrput  || "MODE" "SET" signal ///////////////////////
 void ISR_external_INT() {                                     
   switch(!digitalRead(SET_ENCODE_PIN)) {
-    case 1:                                                   // SET signal
-      (mode == 1 || mode == 2 || mode == 4) ? select++ :      // Mode 1 / 2/ 4 absord SET signal
-                                              select = select;
-      select = (mode != 1) ? int(overflow_sta(select, 's')) : // Mode 1 DONT have state: (select = 0)
-                             int(overflow_sta(select, 'S'));  // => 1 -> 2 -> 1 -> 2 ......
+    case 1:                                                             // SET signal
+      (mode == 1 || mode == 2 || mode == 4) ? select++ :   // Mode 1 / 2/ 4 / 5 absord SET signal
+                                                           select = select;
+      select = (mode != 1) ? int(overflow_sta(select, 's')) :           // Mode 1 DONT have state: (select = 0)
+                             int(overflow_sta(select, 'S'));            // => 1 -> 2 -> 1 -> 2 ......
       break;
-    case 0:                                                   // MODE signal
-      (select != 0 & mode != 1) ? select = 0 : mode++;        // Mode 1 have only 2 state of select (select = 0 or select = 1)
+    case 0:                                                             // MODE signal
+      (select != 0 & mode != 1) ? select = 0 : mode++;                  // Mode 1 have only 2 state of select (select = 0 or select = 1)
       mode = int(overflow_sta(mode, 'm'));
-      (mode == 1) ? select = 1 : select = 0;                  // Mode 1 - select hour (default)
+      (mode == 1) ? select = 1 : select = 0;                            // Mode 1 - select hour (default)
       break;
   }
   // Check
@@ -253,7 +264,7 @@ void ISR_external_INT() {
 //  TC1 COMPA Interrput  || Normal mode ///////////////////////
 ISR (TIMER1_COMPA_vect) {               // Timer Compare Match Interrupt
     (mode != 1) ? count_per_025sec++ : count_per_025sec = count_per_025sec;               // Mode 1 - stop counting
-
+    count_per_025sec = overflow_sta(count_per_025sec, 't');
     // Match Alarm time ///////////////////////////////////////
     if(count_per_025sec == alarm_time && mode == 0) digitalWrite(BUZZ_PIN, HIGH);
     else if(count_per_025sec == overflow_sta(alarm_time, 't') + ALARM_DUR * 60 * 4 || !digitalRead(INC_PIN)) { 
@@ -265,10 +276,23 @@ ISR (TIMER1_COMPA_vect) {               // Timer Compare Match Interrupt
 
     // Count up mode /////////////////////////////
     countUp_time += (countUp_enable) ? 1 : 0;
+    countUp_time = overflow_sta(countUp_time, 'c');
     if(mode != 3) {
       countUp_enable = false;
       countUp_time = 0;
     }
+    // Count down mode ///////////////////////////
+    countDown_time -= (countDown_enable) ? 1 : 0;
+    if(countDown_time == 0) {
+      trigC_enable = true;
+      countDown_enable = false;
+    }
+    if(mode != 4) {
+      countDown_enable = false;
+      countDown_time = 0;
+      trigC_enable = false;
+    }
+    
 }
 
 /// Pin Change INT || + - signal ////////////////////////////
@@ -287,12 +311,12 @@ ISR (PCINT1_vect) {
     Serial.print("\t");
     Serial.println(dec_enable);
   }
-  else if(mode == 5 || mode == 3) { // Count Up/Down mode
-    switch(mode) {                  // Mode 5 and Mode 3 have counting mode 
+  else if(select == 0 & (mode == 4 || mode == 3)) { // Count Up/Down mode
+    switch(mode) {                                  // Mode 4 and Mode 3 have counting mode 
       case 3:
         if(!digitalRead(DEC_PIN)) {
-          countUp_time = 0;         // RESET count up value -> 0
-          countUp_enable = false;   // Stop couting
+          countUp_time = 0;                         // RESET count up value -> 0
+          countUp_enable = false;                   // Stop couting
         }
         else {
           // Turn "PinChange INT" to "External INT" (mode: RISING)
@@ -300,17 +324,35 @@ ISR (PCINT1_vect) {
           countUp_enable = (!digitalRead(INC_PIN)) ? !countUp_enable : countUp_enable;
         }
         break;
-      case 5:
-
+      case 4:
+          // NOT YET ??????????????????????????????????????????????????????????????????????//
+          // Count down
+        if(!digitalRead(DEC_PIN)) {
+          countDown_time = 0;                         // RESET count up value -> 0
+          countDown_enable = false;                   // Stop couting
+          trigC_enable = false;                       // Disable trigger
+        }
+        else {
+          // Turn "PinChange INT" to "External INT" (mode: RISING)
+          // RISING EDGE -> Toggle countUp_enable 
+          countDown_enable = (!digitalRead(INC_PIN)) ? !countDown_enable : countDown_enable;
+        }
         break;
     }
-    // Check
+    // Check case 3
     Serial.print("ENABLE");
     Serial.print("\t");
     Serial.println("COUNT");
     Serial.print(countUp_enable);
     Serial.print("\t");
     Serial.println(countUp_time);
+  }
+  else if(select != 0 & mode == 4) {
+    inc_enable = !digitalRead(INC_PIN);
+    dec_enable = !digitalRead(DEC_PIN);
+    
+    adjust_enable(inc_enable, dec_enable);    // Increase / Decrease immediately (press button)
+
   }
 }
 
@@ -328,7 +370,9 @@ void loop() {
     case 3:
       disp(countUp_time, select, true);
       break;
-    
+    case 4:
+      disp(countDown_time, select, true);
+      break;
   }
   
 }
