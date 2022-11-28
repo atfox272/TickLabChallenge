@@ -6,7 +6,7 @@
  - Set time mode 				               
  - Alarm mode (set)			               
  - Alarm mode (alarm)			             
- - Count up mode (begin line 178)
+ - Count up mode 
 # Not yet
  - Count down mode (set)
  - Count down mode (count)	
