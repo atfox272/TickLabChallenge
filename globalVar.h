@@ -13,8 +13,8 @@ volatile long alarm_time = 0;             // 0 -> 8639999  (00:00:00:00 -> 23:59
 volatile long countUp_time = 0;           // 0 -> 9999     (00:00:00:00 -> 00:00:99:99)
 volatile long countDown_time = 0;         // 0 -> 599999   (00:00:00:00 -> 00:99:59:99)
 // State var
-volatile int mode = 0;                    // 0 -> 5
-volatile int select = 0;                  // 0 -> 2
+volatile byte mode = 0;                   // 0 -> 5
+volatile byte select = 0;                 // 0 -> 2
 
 // Adjust flag
 volatile bool inc_enable = false;         // increase enable flag
@@ -22,6 +22,9 @@ volatile bool dec_enable = false;         // decrease enable flag
 volatile bool countUp_enable = false;     // 
 volatile bool countDown_enable = false;   // 
 
+// Numbers of led
+volatile byte led_num = 1;              // 1 -> 4
+volatile bool colon   = false;
 // Temp
 volatile unsigned int temp_count = 0;
 
