@@ -12,7 +12,8 @@
  - Đếm lên hiển thị sec:msec (00:00 -> 99:99)
  - Tích hợp thêm chuông báo (cho alarm và countDown mode) 
  - Tạch module từng chức năng
+ - Hiển thị bằng cách quét led
 # Bug
- - Function: dec_2_bin
-# Update
+ - Function: dec_2_bin (Fixed)
+# Updating
  
