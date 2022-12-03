@@ -15,33 +15,43 @@ void setup() {
   pinMode(BUZZ_PIN, OUTPUT);
 
   // Display pin
-  pinMode(FIRST_DISP_A, OUTPUT);
-  pinMode(FIRST_DISP_B, OUTPUT);
-  pinMode(SECOND_DISP_A, OUTPUT);
-  pinMode(SECOND_DISP_B, OUTPUT);
-  pinMode(SECOND_DISP_C, OUTPUT);
-  pinMode(THIRD_DISP_A, OUTPUT);
-  pinMode(THIRD_DISP_B, OUTPUT);
-  pinMode(THIRD_DISP_C, OUTPUT);
-  pinMode(FOURTH_DISP_A, OUTPUT);
-  pinMode(FOURTH_DISP_B, OUTPUT);
-  pinMode(FOURTH_DISP_C, OUTPUT);
-  pinMode(FOURTH_DISP_D, OUTPUT);
+  pinMode(BCD_A, OUTPUT);
+  pinMode(BCD_B, OUTPUT);
+  pinMode(BCD_C, OUTPUT);
+  pinMode(BCD_D, OUTPUT);
+  pinMode(COLON_CLK, INPUT_PULLUP);
+  
+  
+  pinMode(FIRST_NUM, OUTPUT);
+  pinMode(SECOND_NUM, OUTPUT);
+  pinMode(THIRD_NUM, OUTPUT);
+  pinMode(FOURTH_NUM, OUTPUT);
   
 //  Set up Timer 1  //////////////////////////////////////////
   TCCR1A = 0;
   TCCR1B = 0;
   TIMSK1 = 0;
-
   TCNT1 = 0;
+  
   TCCR1B = B1011;
   OCR1A = 2499;
   TIMSK1 |= (1 << OCIE1A);
+
+//  Set up Timer 1  //////////////////////////////////////////
+  TCCR0A = 0;
+  TCCR0B = 0;
+  TIMSK0 = 0;
+  TCNT0 = 0;
+  
+  TCCR0A = B10; // Enable CTC
+  TCCR0B = B100;
+  OCR0A = 16000000 / 256 / FREQUENCY_LED;
+  TIMSK0 = B10;
   
 //  Set up External Interrupt /////////////////////////////////
   attachInterrupt(exINT_type, ISR_external_INT, FALLING);
   
-////Set up PinChange Interrupt/////////////////////////////////
+//  Set up PinChange Interrupt/////////////////////////////////
   PCICR = B10;
   PCMSK1 = B1100;
   
@@ -78,6 +88,10 @@ void ISR_external_INT() {
 ISR (TIMER1_COMPA_vect) {               // Timer Compare Match Interrupt
     (mode != 1) ? count_per_025sec++ : count_per_025sec = count_per_025sec;               // Mode 1 - stop counting
     count_per_025sec = overflow_sta(count_per_025sec, 't');
+
+    // Colon in digital clock
+    colon = (mode == 0) ? count_per_025sec % (2 * FREQUENCY) : 0;
+    digitalWrite(COLON_CLK, colon);
     
     // Match Alarm time ///////////////////////////////////////
     if(count_per_025sec == alarm_time && mode == 0) digitalWrite(BUZZ_PIN, HIGH);         // Just alarm in Mode 0
@@ -111,6 +125,13 @@ ISR (TIMER1_COMPA_vect) {               // Timer Compare Match Interrupt
       countDown_enable = false;
       countDown_time = 0;
     }
+
+}
+
+//  TC0 COMPA Interrput  || Led sweeping ///////////////////////
+ISR (TIMER0_COMPA_vect) {
+    led_num++;
+    led_num = overflow_sta(led_num, 'l');
 }
 
 /// Pin Change INT || + - signal ////////////////////////////
