@@ -1,7 +1,7 @@
 # TickLabChallenge
-Đồng hồ 3 chức năng
-# Done (updated: 2/12/2022)
+* Đồng hồ 3 chức năng
 * Main source: "Prj_TickLabChallenge_update.ino"
+# Done (updated: 2/12/2022)
  - Normal mode 				                 	
  - Set time mode 				               
  - Alarm mode (set)			               
