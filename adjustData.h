@@ -26,6 +26,8 @@ long overflow_sta(volatile long num, char sta_type) {
     case 'C':     // count up sec:msec
       num = (num >= COUNTU_AMOUNT) ? num % COUNTU_AMOUNT : (num < START_VALUE) ? num + COUNTU_AMOUNT : num;
       break;
+    case 'l':
+      num = (num > LED_AMOUNT) ? num % LED_AMOUNT : (num <= START_VALUE) ? num + LED_AMOUNT : num;
   }
   return num;
 }
