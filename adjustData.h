@@ -8,10 +8,10 @@
 
 long overflow_sta(volatile long num, char sta_type) {
   switch (sta_type) {
-     case 't':     //overflow TIME
+     case 't':    // overflow TIME
       num = (num >= CTIME_AMOUNT) ? num % CTIME_AMOUNT : (num < START_VALUE) ? num + CTIME_AMOUNT : num;
       break;
-    case 'm':     //overflow MODE
+    case 'm':     // overflow MODE
       num = (num >= MODE_AMOUNT) ? num % MODE_AMOUNT : (num < START_VALUE) ? num + MODE_AMOUNT : num;
       break;
     case 's':     // overflow SET
@@ -26,7 +26,7 @@ long overflow_sta(volatile long num, char sta_type) {
     case 'C':     // count up sec:msec
       num = (num >= COUNTU_AMOUNT) ? num % COUNTU_AMOUNT : (num < START_VALUE) ? num + COUNTU_AMOUNT : num;
       break;
-    case 'l':
+    case 'l':     // led enable
       num = (num > LED_AMOUNT) ? num % LED_AMOUNT : (num <= START_VALUE) ? num + LED_AMOUNT : num;
   }
   return num;
