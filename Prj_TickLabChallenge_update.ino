@@ -7,12 +7,12 @@
 
 void setup() {
   Serial.begin(9600);
-  pinMode(MODE_PIN, INPUT_PULLUP);
-  pinMode(SET_PIN, INPUT_PULLUP);
-  pinMode(MODE_ENCODE_PIN, INPUT_PULLUP);
-  pinMode(SET_ENCODE_PIN, INPUT_PULLUP);
-  pinMode(INC_PIN, INPUT_PULLUP);
-  pinMode(DEC_PIN, INPUT_PULLUP);
+  pinMode(COM_INT, INPUT_PULLUP);
+  pinMode(INC_ENCODER, INPUT_PULLUP);
+  pinMode(DEC_ENCODER, INPUT_PULLUP);
+  pinMode(MODE_ENCODER, INPUT_PULLUP);
+  pinMode(SET_ENCODER, INPUT_PULLUP);
+  
   pinMode(BUZZ_PIN, OUTPUT);
   pinMode(ALARM_STATE_PIN, OUTPUT);
 
@@ -29,15 +29,29 @@ void setup() {
   pinMode(THIRD_NUM, OUTPUT);
   pinMode(FOURTH_NUM, OUTPUT);
   
+//  Set up Timer 2  //////////////////////////////////////////
+  TCCR2A = 0;
+  TCCR2B = 0;
+  TIMSK2 = 0;
+  TCNT2 = 0;
+
+  TCCR2A = B10;
+  TCCR2B = B101;
+  OCR2A = 249;            // 500 interrupt time <=> 1 sec
+  TIMSK2 |= (1 << OCIE2A);
+
 //  Set up Timer 1  //////////////////////////////////////////
   TCCR1A = 0;
   TCCR1B = 0;
   TIMSK1 = 0;
   TCNT1 = 0;
-  
-  TCCR1B = B1011;
-  OCR1A = 2499;
-  TIMSK1 |= (1 << OCIE1A);
+
+  TCCR1B |= (1 << ICNC1) | (0 << ICES1) | (1 << WGM12) | (1 << CS12) | (1 << CS11) | (0 << CS10);
+  OCR1A = 0;
+  // ICES1 (0): falling edge
+  // ICNI1 (1): noise cancler
+
+  TIMSK1 |= (1 << ICIE1) | (1 << OCIE1A);
 
 //  Set up Timer 0  //////////////////////////////////////////
   TCCR0A = 0;
@@ -50,54 +64,139 @@ void setup() {
   OCR0A = 16000000 / 256 / FREQUENCY_LED;
   TIMSK0 = B10;
   
-//  Set up External Interrupt /////////////////////////////////
-  attachInterrupt(exINT_mode, ISR_external_INT0, FALLING);
-  attachInterrupt(exINT_set, ISR_external_INT1, FALLING);
+}
+
+ISR (TIMER1_CAPT_vect) {
+  if(!digitalRead(MODE_ENCODER) && debounce_count >= DEBOUNCE_TIME) {
+    debounce_count = 0;                                                             // Debounce
+    (!isAlarming) ? (select != 0 & mode != 1) ? select = 0 : mode++ : mode = mode;  // Alarm mode (turn on) cancle all signal (exp: "+" signal)
+    mode = int(overflow_sta(mode, 'm'));                                            // Mode 1 have only 2 state of select (select = 0 or select = 1)
+    (mode == 1) ? select = 1 : select = 0;                                          // Mode 1 - select hour (default)
   
-//  Set up PinChange Interrupt/////////////////////////////////
-  PCICR = B10;
-  PCMSK1 = B1100;
-  
+    // Check
+    Serial.print("MODE");
+    Serial.print("\t");
+    Serial.println("SET");
+    Serial.print(mode);
+    Serial.print("\t");
+    Serial.println(select);
+  }
+  else if(!digitalRead(SET_ENCODER) && debounce_count >= DEBOUNCE_TIME) {
+    debounce_count = 0;                         // Debounce
+    isCounting = countUp_enable || countDown_enable;                                         // NOT receive "SET" signal in Couting mode (mode 3 & 4)
+    
+    (mode == 1 || mode == 2 || (mode == 4 && !isCounting && !isAlarming)) ? select++ :       // Mode 1 / 2/ 4 / 5 absord SET signal
+                                                                            select = select;
+    select = (mode != 1) ? int(overflow_sta(select, 's')) :                                  // Mode 1 DONT have state: (select = 0)
+                           int(overflow_sta(select, 'S'));                                   // => 1 -> 2 -> 1 -> 2 ......
+    // Check
+    Serial.print("MODE");
+    Serial.print("\t");
+    Serial.println("SET");
+    Serial.print(mode);
+    Serial.print("\t");
+    Serial.println(select);
+  }
+  else if(!digitalRead(INC_ENCODER) && debounce_count >= DEBOUNCE_HOLD_TIME) {
+    
+    debounce_count = 0;     
+    if(select != 0) {                           // Adjust mode
+      inc_enable = !inc_enable;
+      TCCR1B ^= 0b01000000;                     // Catch on FALLING / RISING edge
+      
+      (!digitalRead(INC_ENCODER)) ? adjust_enable(inc_enable, false) : adjust_enable(false, false);    // Increase / Decrease immediately (press button)
+//  
+      // Check
+      Serial.print("INCC");
+      Serial.print("\t");
+      Serial.println("DECC");
+      Serial.print(inc_enable);
+      Serial.print("\t");
+      Serial.println(dec_enable);
+
+//      Serial.print("INC_ENCODER: \t");
+//      Serial.println(!digitalRead(INC_ENCODER));
+    }
+    else if(select == 0 & (mode == 4 || mode == 3)) { // Count Up/Down mode
+      switch(mode) {                                  // Mode 4 and Mode 3 have counting mode 
+        case 3:
+          // Turn "PinChange INT" to "External INT" (mode: RISING)
+          // RISING EDGE -> Toggle countUp_enable 
+          countUp_enable = (!digitalRead(INC_ENCODER)) ? !countUp_enable : countUp_enable;
+          break;
+        case 4:
+          // Turn "PinChange INT" to "External INT" (mode: RISING)
+          // RISING EDGE -> Toggle countUp_enable 
+          countDown_enable = (countDown_time == 0) ? false :         // Cant count down without setting up countdown time
+                             (!digitalRead(INC_ENCODER)) ? !countDown_enable : countDown_enable;
+          break;
+      }
+      // Check case 3
+//      Serial.print("ENABLE");
+//      Serial.print("\t");
+//      Serial.println("COUNT");
+//      Serial.print(countUp_enable);
+//      Serial.print("\t");
+//      Serial.println(countUp_time);
+    }
+    else if(select == 0 & mode == 2) {              // EASTER EGG: holding "+" button for 3 seconds in Alarm mode -> Toggle (ON / OFF) Alarm mode
+      hold_PLUSbutton = !hold_PLUSbutton;           // Press (true) -> Release (false)
+    }
+  }
+  else if(!digitalRead(DEC_ENCODER) && debounce_count >= DEBOUNCE_HOLD_TIME) {
+
+    debounce_count = 0;     
+    if(select != 0) {                           // Adjust mode
+      
+      TCCR1B ^= 0b01000000;                     // Catch on FALLING / RISING edge
+      dec_enable = !dec_enable;
+      
+      (!digitalRead(DEC_ENCODER)) ? adjust_enable(false, dec_enable) : adjust_enable(false, false);    // Increase / Decrease immediately (press button)
+   
+      // Check
+      Serial.print("INC");
+      Serial.print("\t");
+      Serial.println("DEC");
+      Serial.print(inc_enable);
+      Serial.print("\t");
+      Serial.println(dec_enable);
+    }
+    else if(select == 0 & (mode == 4 || mode == 3)) { // Count Up/Down mode
+      switch(mode) {                                  // Mode 4 and Mode 3 have counting mode 
+        case 3:
+          countUp_time = 0;                         // RESET count up value -> 0
+          countUp_enable = false;                   // Stop couting
+          break;
+        case 4:
+          // Count down
+          countDown_time = 0;                         // RESET count up value -> 0
+          countDown_enable = false;                   // Stop couting
+          break;
+      }
+      // Check case 3
+//      Serial.print("ENABLE");
+//      Serial.print("\t");
+//      Serial.println("COUNT");
+//      Serial.print(countUp_enable);
+//      Serial.print("\t");
+//      Serial.println(countUp_time);
+    }
+    else if(select == 0 & mode == 2) {              // EASTER EGG: holding "+" button for 3 seconds in Alarm mode -> Toggle (ON / OFF) Alarm mode
+      hold_PLUSbutton = !hold_PLUSbutton;           // Press (true) -> Release (false)
+    }
+  }
+
 }
 
 
-//  Interrupt service routine  ////////////////////////////////////
-
-//  External Interrput 0  || "MODE" signal ////////////////////
-void ISR_external_INT0() {                                     
-  (!isAlarming) ? (select != 0 & mode != 1) ? select = 0 : mode++ : mode = mode;  // Alarm mode (turn on) cancle all signal (exp: "+" signal)
-  mode = int(overflow_sta(mode, 'm'));                                            // Mode 1 have only 2 state of select (select = 0 or select = 1)
-  (mode == 1) ? select = 1 : select = 0;                                          // Mode 1 - select hour (default)
-
-  // Check
-  Serial.print("MODE");
-  Serial.print("\t");
-  Serial.println("SET");
-  Serial.print(mode);
-  Serial.print("\t");
-  Serial.println(select);
-}
-//  External Interrput 1  || "SET" signal ////////////////////
-void ISR_external_INT1() {
-  isCounting = countUp_enable || countDown_enable;                                         // NOT receive "SET" signal in Couting mode (mode 3 & 4)
-  
-  (mode == 1 || mode == 2 || (mode == 4 && !isCounting && !isAlarming)) ? select++ :       // Mode 1 / 2/ 4 / 5 absord SET signal
-                                                                          select = select;
-  select = (mode != 1) ? int(overflow_sta(select, 's')) :                                  // Mode 1 DONT have state: (select = 0)
-                         int(overflow_sta(select, 'S'));                                   // => 1 -> 2 -> 1 -> 2 ......
-  // Check
-  Serial.print("MODE");
-  Serial.print("\t");
-  Serial.println("SET");
-  Serial.print(mode);
-  Serial.print("\t");
-  Serial.println(select);
-}
 
 //  TC1 COMPA Interrput  || Normal mode ///////////////////////
-ISR (TIMER1_COMPA_vect) {               // Timer Compare Match Interrupt
+ISR (TIMER2_COMPA_vect) {               // Timer Compare Match Interrupt
     (mode != 1) ? count_per_025sec++ : count_per_025sec = count_per_025sec;         // Mode 1 - stop counting
     count_per_025sec = overflow_sta(count_per_025sec, 't');
+
+    // Debounce button
+    debounce_count += (debounce_count >= DEBOUNCE_TIME) ? 0 : 1;
 
     // Colon in digital clock (mode 0)
     if(mode == 0) {
@@ -111,7 +210,7 @@ ISR (TIMER1_COMPA_vect) {               // Timer Compare Match Interrupt
       digitalWrite(BUZZ_PIN, HIGH);                               // Just alarm in Mode 0
       isAlarming = true;
     }
-    else if(count_per_025sec == overflow_sta(alarm_time, 't') + ALARM_DUR * 60 * FREQUENCY || !digitalRead(INC_PIN)) { 
+    else if(count_per_025sec == overflow_sta(alarm_time, 't') + ALARM_DUR * 60 * FREQUENCY || !digitalRead(INC_ENCODER)) { 
     // After n minutes or "+" signal -> turn off alarm////////
       digitalWrite(BUZZ_PIN, LOW);
       isAlarming = false;
@@ -162,61 +261,6 @@ ISR (TIMER0_COMPA_vect) {
     led_num = overflow_sta(led_num, 'l');
 }
 
-/// Pin Change INT || + - signal ////////////////////////////
-ISR (PCINT1_vect) {
-  if(select != 0) {                           // Adjust mode
-    inc_enable = !digitalRead(INC_PIN);
-    dec_enable = !digitalRead(DEC_PIN);
-    
-    adjust_enable(inc_enable, dec_enable);    // Increase / Decrease immediately (press button)
-
-    // Check
-    Serial.print("INC");
-    Serial.print("\t");
-    Serial.println("DEC");
-    Serial.print(inc_enable);
-    Serial.print("\t");
-    Serial.println(dec_enable);
-  }
-  else if(select == 0 & (mode == 4 || mode == 3)) { // Count Up/Down mode
-    switch(mode) {                                  // Mode 4 and Mode 3 have counting mode 
-      case 3:
-        if(!digitalRead(DEC_PIN)) {
-          countUp_time = 0;                         // RESET count up value -> 0
-          countUp_enable = false;                   // Stop couting
-        }
-        else {
-          // Turn "PinChange INT" to "External INT" (mode: RISING)
-          // RISING EDGE -> Toggle countUp_enable 
-          countUp_enable = (!digitalRead(INC_PIN)) ? !countUp_enable : countUp_enable;
-        }
-        break;
-      case 4:
-          // Count down
-        if(!digitalRead(DEC_PIN)) {
-          countDown_time = 0;                         // RESET count up value -> 0
-          countDown_enable = false;                   // Stop couting
-        }
-        else {
-          // Turn "PinChange INT" to "External INT" (mode: RISING)
-          // RISING EDGE -> Toggle countUp_enable 
-          countDown_enable = (countDown_time == 0) ? false :         // Cant count down without setting up countdown time
-                             (!digitalRead(INC_PIN)) ? !countDown_enable : countDown_enable;
-        }
-        break;
-    }
-    // Check case 3
-    Serial.print("ENABLE");
-    Serial.print("\t");
-    Serial.println("COUNT");
-    Serial.print(countUp_enable);
-    Serial.print("\t");
-    Serial.println(countUp_time);
-  }
-  else if(select == 0 & mode == 2) {              // EASTER EGG: holding "+" button for 3 seconds in Alarm mode -> Toggle (ON / OFF) Alarm mode
-    hold_PLUSbutton = !hold_PLUSbutton;           // Press (true) -> Release (false)
-  }
-}
 
 void loop() {
   switch (mode) {
