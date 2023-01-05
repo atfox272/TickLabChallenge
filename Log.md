@@ -15,5 +15,14 @@
  - Hiển thị bằng cách quét led
 # Bug
  - Function: dec_2_bin (Fixed)
+# Done (updated: 05/01/2023)
+ - Chuyển sang ngắt trên Timer
+   + Timer 2: Count time + Alarm
+   + Timer 1: Button (Capture event Interrupt)
+   + Timer 0: Led Sweeping 
+ - Thay đổi sơ đồ nguyên lý mạch đồng hồ 3 chức năng (file TickLabchallenge.pdsprj)
+# Bug
+ - Debounce (Fixed)
+ - CountingUp mode chỉ đếm đến 40s (Fixed)
 # Updating
  
