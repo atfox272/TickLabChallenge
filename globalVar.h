@@ -4,9 +4,6 @@
 #include "macroPin.h"
 #include "macroConst.h"
 
-// External Interrupt type
-bool exINT_mode = (MODE_PIN == 2) ? 0 : 1; // Select INT 0
-bool exINT_set = (SET_PIN == 3) ? 1 : 0;   // Select INT 1
 
 // Time var
 volatile long count_per_025sec = 0;       // 0 -> 8639999  (00:00:00:00 -> 23:59:59:99)
@@ -32,6 +29,7 @@ volatile bool hold_PLUSbutton = false;
 volatile byte led_num = 1;                // 1 -> 4
 volatile bool colon   = false;
 // Temp
+volatile long debounce_count = 0;
 volatile unsigned int temp_count = 0;
 volatile unsigned int temp_count2 = 0;    // Use for turning ON / OFF alarm mode
 
