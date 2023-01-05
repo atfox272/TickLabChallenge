@@ -12,8 +12,8 @@ void dec_2_bin (int decimal, bool *temp_arr) {  //bxxxx: (0 -> 9)
   temp_arr[1] = (decimal / 4) % 2;
   temp_arr[0] = (decimal / 8) % 2;    // MSB
 }
-void turn_to_ClkDisp(long dis_time, int *arr) {   // arr[0]: hr - arr[1]: min - arr[2]: sec - arr[3]: (x10)msec  
-  arr[3] = dis_time % FREQUENCY;
+void turn_to_ClkDisp(long dis_time, int *arr) {       // arr[0]: hr - arr[1]: min - arr[2]: sec - arr[3]: (x10)msec  
+  arr[3] = dis_time / (FREQUENCY / 100) % 100;  // count 10msec
   arr[2] = (dis_time / FREQUENCY) % 60;
   arr[1] = (dis_time / FREQUENCY / 60) % 60;
   arr[0] = dis_time / FREQUENCY / (60 * 60);
@@ -47,7 +47,9 @@ void disp(long dis_time, byte dis_select, bool normal_mode = false, bool countUp
   Serial.print("\t\t");
   Serial.print(mode);
   Serial.print("\t");
-  Serial.println(select);
+  Serial.print(select);
+  Serial.print("\t");
+  Serial.println(inc_enable);
   
   dec_2_bin(first_num, first_num_bin);
   dec_2_bin(second_num, second_num_bin);
